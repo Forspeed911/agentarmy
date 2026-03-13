@@ -17,5 +17,21 @@ services:
     ports:
       - "6379:6379"
 
+  api:
+    build: ./api
+    ports:
+      - "3000:3000"
+    env_file: ./api/.env
+    depends_on:
+      - db
+      - redis
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      - api
+
 volumes:
   pgdata:
