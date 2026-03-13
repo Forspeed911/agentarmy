@@ -37,7 +37,7 @@ export class LlmService {
 
   constructor(private searchService: SearchService) {
     this.client = new Anthropic({
-      apiKey: process.env.ANTHROPIC_API_KEY || 'dummy',
+      apiKey: process.env.ANT_API_KEY || 'dummy',
     });
     this.model = process.env.LLM_MODEL || 'claude-sonnet-4-6';
   }
