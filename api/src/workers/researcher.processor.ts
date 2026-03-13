@@ -97,7 +97,7 @@ export class ResearcherProcessor extends WorkerHost {
           status: 'completed',
           completedAt: new Date(),
           durationMs: Date.now() - startedAt.getTime(),
-          model: process.env.LLM_MODEL || 'claude-sonnet-4-6',
+          llmModel: process.env.LLM_MODEL || 'claude-sonnet-4-6',
           inputTokens: llmResult.tokensIn,
           outputTokens: llmResult.tokensOut,
         },
