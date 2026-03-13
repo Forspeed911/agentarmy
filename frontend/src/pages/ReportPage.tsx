@@ -71,8 +71,8 @@ function SectionCard({ section }: { section: SectionReport }) {
             <div className="space-y-3">
               {(content.findings as Array<Record<string, unknown>>).map((finding, i) => (
                 <div key={i} className="text-sm">
-                  <p className="text-slate-300">{String(finding.insight || finding.finding || '')}</p>
-                  {finding.source_url && (
+                  <p className="text-slate-300"> {String(finding.insight || finding.finding || '')}</p>
+                  {Boolean(finding.source_url) && (
                     <a
                       href={String(finding.source_url)}
                       target="_blank"
@@ -84,7 +84,7 @@ function SectionCard({ section }: { section: SectionReport }) {
                   )}
                 </div>
               ))}
-              {content.summary && (
+              {Boolean(content.summary) && (
                 <p className="text-sm text-slate-400 pt-2 border-t border-slate-700/50">{String(content.summary)}</p>
               )}
             </div>

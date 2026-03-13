@@ -98,8 +98,8 @@ export class ResearcherProcessor extends WorkerHost {
           completedAt: new Date(),
           durationMs: Date.now() - startedAt.getTime(),
           model: process.env.LLM_MODEL || 'claude-sonnet-4-6',
-          tokensIn: llmResult.tokensIn,
-          tokensOut: llmResult.tokensOut,
+          inputTokens: llmResult.tokensIn,
+          outputTokens: llmResult.tokensOut,
         },
       });
 

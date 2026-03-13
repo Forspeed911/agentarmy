@@ -91,8 +91,8 @@ export class CriticProcessor extends WorkerHost {
           status: 'completed',
           completedAt: new Date(),
           durationMs: Date.now() - run.startedAt.getTime(),
-          tokensIn: llmResult.tokensIn,
-          tokensOut: llmResult.tokensOut,
+          inputTokens: llmResult.tokensIn,
+          outputTokens: llmResult.tokensOut,
         },
       });
 
