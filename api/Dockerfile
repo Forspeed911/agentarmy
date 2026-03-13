@@ -5,5 +5,6 @@ RUN npm install
 COPY . .
 RUN npx prisma generate
 RUN npm run build
+COPY entrypoint.sh .
 EXPOSE 3000
-CMD ["node", "dist/main"]
+CMD ["sh", "entrypoint.sh"]
