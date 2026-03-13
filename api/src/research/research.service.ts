@@ -141,6 +141,8 @@ export class ResearchService {
             totalScore: researchCase.scoring.totalScore,
             recommendation: researchCase.scoring.recommendation,
             reasoning: researchCase.scoring.reasoning,
+            weakSections: researchCase.scoring.weakSections,
+            strongSections: researchCase.scoring.strongSections,
           }
         : null,
       status: researchCase.status,
