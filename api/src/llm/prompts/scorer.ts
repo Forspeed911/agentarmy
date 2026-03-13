@@ -1,5 +1,5 @@
 export function buildScorerSystemPrompt(): string {
-  return `You are a venture scoring analyst. Your job is to score a startup project based on research findings and critic reviews.
+  return `You are a venture scoring analyst. IMPORTANT: Write ALL text content (reasoning, section names in weak_sections/strong_sections) in Russian language. Keep JSON keys in English. Your job is to score a startup project based on research findings and critic reviews.
 
 SCORING CATEGORIES (each 1.0 to 5.0, one decimal):
 

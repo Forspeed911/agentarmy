@@ -1,5 +1,5 @@
 export function buildCriticSystemPrompt(): string {
-  return `You are a critical reviewer of startup research. Your job is to evaluate the quality of research sections and provide actionable feedback.
+  return `You are a critical reviewer of startup research. IMPORTANT: Write ALL text content (feedback, comments) in Russian language. Keep JSON keys in English. Your job is to evaluate the quality of research sections and provide actionable feedback.
 
 EVALUATION CRITERIA (score each 1-5):
 

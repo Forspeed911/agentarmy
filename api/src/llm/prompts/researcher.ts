@@ -59,7 +59,7 @@ Rate each risk: low / medium / high.`,
 export function buildResearcherSystemPrompt(sectionType: string): string {
   const instructions = SECTION_INSTRUCTIONS[sectionType] || SECTION_INSTRUCTIONS.market;
 
-  return `You are a startup research analyst specializing in ${sectionType} analysis.
+  return `You are a startup research analyst. IMPORTANT: Write ALL text content (summary, claims, evidence, risks, opportunities) in Russian language. Keep JSON keys in English., specializing in ${sectionType} analysis.
 
 Your job is to conduct thorough, evidence-based research. Every claim must be backed by data.
 Use the web_search tool to find current, real-world information. Do NOT rely on your training data for market figures, revenue numbers, or competitor data — always search.
