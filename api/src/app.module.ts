@@ -2,6 +2,8 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { BullModule } from '@nestjs/bullmq';
 import { PrismaModule } from './prisma/prisma.module';
+import { SearchModule } from './search/search.module';
+import { LlmModule } from './llm/llm.module';
 import { ProjectsModule } from './projects/projects.module';
 import { ResearchModule } from './research/research.module';
 import { WorkersModule } from './workers/workers.module';
@@ -16,6 +18,8 @@ import { WorkersModule } from './workers/workers.module';
       },
     }),
     PrismaModule,
+    SearchModule,
+    LlmModule,
     ProjectsModule,
     ResearchModule,
     WorkersModule,

@@ -3,10 +3,22 @@ import { Logger } from '@nestjs/common';
 import { Job } from 'bullmq';
 import { PrismaService } from '../prisma/prisma.service';
 import { ResearchService } from '../research/research.service';
+import { LlmService } from '../llm/llm.service';
+import { buildScorerSystemPrompt, buildScorerUserPrompt } from '../llm/prompts/scorer';
 
 interface ScorerJob {
   caseId: string;
 }
+
+const WEIGHTS: Record<string, number> = {
+  market_need: 0.2,
+  competition: 0.15,
+  demand_signals: 0.15,
+  tech_feasibility: 0.15,
+  risk: 0.1,
+  differentiation: 0.15,
+  monetization: 0.1,
+};
 
 @Processor('scorer')
 export class ScorerProcessor extends WorkerHost {
@@ -15,6 +27,7 @@ export class ScorerProcessor extends WorkerHost {
   constructor(
     private prisma: PrismaService,
     private researchService: ResearchService,
+    private llm: LlmService,
   ) {
     super();
   }
@@ -32,30 +45,47 @@ export class ScorerProcessor extends WorkerHost {
     });
 
     try {
-      // TODO: Call LLM to score based on sections + reviews
-      // For now, placeholder scores
-      const scores = {
-        market_need: 3.5,
-        competition: 3.0,
-        demand_signals: 3.2,
-        tech_feasibility: 4.0,
-        risk: 3.0,
-        differentiation: 3.0,
-        monetization: 3.5,
-      };
+      const researchCase = await this.prisma.researchCase.findUniqueOrThrow({
+        where: { id: caseId },
+        include: { project: true },
+      });
 
-      const weights = {
-        market_need: 0.2,
-        competition: 0.15,
-        demand_signals: 0.15,
-        tech_feasibility: 0.15,
-        risk: 0.1,
-        differentiation: 0.15,
-        monetization: 0.1,
-      };
+      const sections = await this.prisma.researchSection.findMany({
+        where: { caseId },
+      });
 
+      const reviews = await this.prisma.criticReview.findMany({
+        where: { caseId },
+        orderBy: { iteration: 'desc' },
+      });
+
+      // Deduplicate reviews — latest per section
+      const latestReviews = new Map<string, typeof reviews[0]>();
+      for (const r of reviews) {
+        if (!latestReviews.has(r.sectionType)) {
+          latestReviews.set(r.sectionType, r);
+        }
+      }
+
+      // Call LLM (no tools)
+      const systemPrompt = buildScorerSystemPrompt();
+      const userPrompt = buildScorerUserPrompt(
+        researchCase.project.name,
+        sections.map((s) => ({ sectionType: s.sectionType, content: s.content })),
+        [...latestReviews.values()].map((r) => ({
+          sectionType: r.sectionType,
+          evidenceQuality: r.evidenceQuality,
+          logicQuality: r.logicQuality,
+          completeness: r.completeness,
+          verdict: r.verdict,
+        })),
+      );
+
+      const llmResult = await this.llm.completeSimple(systemPrompt, userPrompt);
+
+      const scores = llmResult.content.scores || {};
       const totalScore = Object.entries(scores).reduce(
-        (sum, [key, val]) => sum + val * (weights[key as keyof typeof weights] || 0),
+        (sum, [key, val]) => sum + (Number(val) || 0) * (WEIGHTS[key] || 0),
         0,
       );
 
@@ -66,11 +96,11 @@ export class ScorerProcessor extends WorkerHost {
         data: {
           caseId,
           scores,
-          totalScore,
+          totalScore: Math.round(totalScore * 100) / 100,
           recommendation,
-          reasoning: '[PLACEHOLDER] Scoring reasoning',
-          weakSections: [],
-          strongSections: [],
+          reasoning: llmResult.content.reasoning || '',
+          weakSections: llmResult.content.weak_sections || [],
+          strongSections: llmResult.content.strong_sections || [],
         },
       });
 
@@ -80,8 +110,14 @@ export class ScorerProcessor extends WorkerHost {
           status: 'completed',
           completedAt: new Date(),
           durationMs: Date.now() - run.startedAt.getTime(),
+          tokensIn: llmResult.tokensIn,
+          tokensOut: llmResult.tokensOut,
         },
       });
+
+      this.logger.log(
+        `Scoring done: total=${totalScore.toFixed(2)} → ${recommendation} | ${llmResult.tokensIn}+${llmResult.tokensOut} tokens`,
+      );
 
       await this.researchService.onScoringDone(caseId);
     } catch (error) {
