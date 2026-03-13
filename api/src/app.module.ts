@@ -15,6 +15,8 @@ import { WorkersModule } from './workers/workers.module';
       connection: {
         host: process.env.REDIS_HOST || 'localhost',
         port: parseInt(process.env.REDIS_PORT || '6379', 10),
+        maxRetriesPerRequest: null,
+        retryStrategy: (times: number) => Math.min(times * 500, 5000),
       },
     }),
     PrismaModule,
