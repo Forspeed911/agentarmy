@@ -104,3 +104,13 @@ export const api = {
       }),
   },
 };
+
+// Archive
+export const archiveApi = {
+  archive: (id: string) =>
+    request(`/projects/${id}/archive`, { method: 'PATCH' }),
+  unarchive: (id: string) =>
+    request(`/projects/${id}/unarchive`, { method: 'PATCH' }),
+  listArchived: () =>
+    request<{ items: Project[]; total: number }>('/projects?archived=true'),
+};

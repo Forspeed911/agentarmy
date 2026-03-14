@@ -10,9 +10,10 @@ export class ProjectsService {
     return this.prisma.project.create({ data: dto });
   }
 
-  findAll(limit = 20, offset = 0) {
+  findAll(limit = 20, offset = 0, archived = false) {
     return Promise.all([
       this.prisma.project.findMany({
+        where: { archived },
         take: limit,
         skip: offset,
         orderBy: { createdAt: 'desc' },
@@ -24,7 +25,7 @@ export class ProjectsService {
           },
         },
       }),
-      this.prisma.project.count(),
+      this.prisma.project.count({ where: { archived } }),
     ]).then(([items, total]) => ({ items, total }));
   }
 
@@ -38,6 +39,20 @@ export class ProjectsService {
           include: { scoring: true },
         },
       },
+    });
+  }
+
+  archive(id: string) {
+    return this.prisma.project.update({
+      where: { id },
+      data: { archived: true },
+    });
+  }
+
+  unarchive(id: string) {
+    return this.prisma.project.update({
+      where: { id },
+      data: { archived: false },
     });
   }
 }

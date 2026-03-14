@@ -1,6 +1,6 @@
-import { useParams, Link } from 'react-router-dom'
+import { useParams, Link, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { api } from '../api/client'
+import { api, archiveApi } from '../api/client'
 import StatusBadge from '../components/StatusBadge'
 
 const SECTION_LABELS: Record<string, string> = {
@@ -30,10 +30,20 @@ export default function ProjectPage() {
     refetchInterval: 3000,
   })
 
+  const navigate = useNavigate()
+
   const startMutation = useMutation({
     mutationFn: () => api.research.start(id!),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['project', id] })
+    },
+  })
+
+  const archiveMutation = useMutation({
+    mutationFn: () => archiveApi.archive(id!),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['projects'] })
+      navigate('/')
     },
   })
 
@@ -77,6 +87,13 @@ export default function ProjectPage() {
               {startMutation.isPending ? 'Starting...' : latestCase ? 'Re-run Research' : 'Start Research'}
             </button>
           )}
+          <button
+            className="bg-slate-600 hover:bg-slate-500 text-white text-sm font-medium px-4 py-2 rounded disabled:opacity-50"
+            onClick={() => archiveMutation.mutate()}
+            disabled={archiveMutation.isPending}
+          >
+            {archiveMutation.isPending ? '...' : 'Archive'}
+          </button>
         </div>
       </div>
 

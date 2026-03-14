@@ -3,6 +3,7 @@ import Dashboard from './pages/Dashboard'
 import ProjectPage from './pages/ProjectPage'
 import ReportPage from './pages/ReportPage'
 import LoginPage from './pages/LoginPage'
+import ArchivePage from './pages/ArchivePage'
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const token = localStorage.getItem('token')
@@ -32,6 +33,11 @@ export default function App() {
               Army of Agents
             </Link>
             <span className="text-xs text-slate-500 bg-slate-700/50 px-2 py-0.5 rounded">MVP</span>
+            {token && (
+              <Link to="/archive" className="text-sm text-slate-400 hover:text-slate-300">
+                Archive
+              </Link>
+            )}
           </div>
           {token && (
             <Link to="/logout" className="text-xs text-slate-400 hover:text-slate-300">
@@ -45,6 +51,7 @@ export default function App() {
           <Route path="/login" element={<LoginPage />} />
           <Route path="/logout" element={<Logout />} />
           <Route path="/" element={<RequireAuth><Dashboard /></RequireAuth>} />
+          <Route path="/archive" element={<RequireAuth><ArchivePage /></RequireAuth>} />
           <Route path="/projects/:id" element={<RequireAuth><ProjectPage /></RequireAuth>} />
           <Route path="/projects/:id/report/:caseId" element={<RequireAuth><ReportPage /></RequireAuth>} />
         </Routes>
