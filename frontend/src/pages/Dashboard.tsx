@@ -99,44 +99,41 @@ export default function Dashboard() {
       )}
 
       {data && data.items.length > 0 && (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm text-left">
-            <thead className="text-xs text-slate-400 uppercase border-b border-slate-700">
-              <tr>
-                <th className="py-3 px-3">Name</th>
-                <th className="py-3 px-3">Source</th>
-                <th className="py-3 px-3">Status</th>
-                <th className="py-3 px-3">Score</th>
-                <th className="py-3 px-3">Date</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-800">
-              {data.items.map((p: Project) => {
-                const latestCase = p.cases?.[0]
-                return (
-                  <tr key={p.id} className="hover:bg-slate-800/50 transition-colors">
-                    <td className="py-3 px-3">
-                      <Link to={`/projects/${p.id}`} className="text-blue-400 hover:text-blue-300 font-medium">
-                        {p.name}
-                      </Link>
-                      {p.url && <span className="text-slate-500 text-xs ml-2">{p.url}</span>}
-                    </td>
-                    <td className="py-3 px-3 text-slate-400">{p.source}</td>
-                    <td className="py-3 px-3">
-                      {latestCase ? <StatusBadge status={latestCase.decision || latestCase.status} /> : <span className="text-slate-600">—</span>}
-                    </td>
-                    <td className="py-3 px-3">
-                      <ScoreBadge score={latestCase?.scoring?.totalScore} />
-                    </td>
-                    <td className="py-3 px-3 text-slate-500 text-xs">
+        <div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {data.items.map((p: Project) => {
+              const latestCase = p.cases?.[0]
+              return (
+                <Link
+                  key={p.id}
+                  to={`/projects/${p.id}`}
+                  className="block bg-slate-800 border border-slate-700 rounded-lg p-4 hover:border-slate-500 transition-colors"
+                >
+                  <div className="flex items-start justify-between gap-2 mb-2">
+                    <h3 className="text-blue-400 font-medium text-sm truncate">{p.name}</h3>
+                    <ScoreBadge score={latestCase?.scoring?.totalScore} />
+                  </div>
+                  {p.url && (
+                    <p className="text-slate-500 text-xs truncate mb-2">{p.url}</p>
+                  )}
+                  <div className="flex items-center justify-between mt-3">
+                    <div className="flex items-center gap-2">
+                      {latestCase ? (
+                        <StatusBadge status={latestCase.decision || latestCase.status} />
+                      ) : (
+                        <span className="text-slate-600 text-xs">No research</span>
+                      )}
+                      <span className="text-slate-600 text-xs">{p.source}</span>
+                    </div>
+                    <span className="text-slate-600 text-xs">
                       {new Date(p.createdAt).toLocaleDateString()}
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-          <p className="text-xs text-slate-600 mt-2">{data.total} total</p>
+                    </span>
+                  </div>
+                </Link>
+              )
+            })}
+          </div>
+          <p className="text-xs text-slate-600 mt-3">{data.total} total</p>
         </div>
       )}
     </div>
