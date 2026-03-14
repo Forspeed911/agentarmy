@@ -55,46 +55,58 @@ export default function ProjectPage() {
   const isRunning = latestCase && !['report_ready', 'go', 'hold', 'reject'].includes(latestCase.status) && latestCase.status !== 'created'
 
   return (
-    <div>
+    <div className="max-w-2xl mx-auto">
       <Link to="/" className="text-sm text-slate-400 hover:text-slate-300 mb-4 inline-block">&larr; Back</Link>
 
-      <div className="flex items-start justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-white">{project.name}</h1>
-          {project.url && <p className="text-slate-400 text-sm mt-1">{project.url}</p>}
-          <div className="flex items-center gap-3 mt-2">
-            <span className="text-xs text-slate-500 bg-slate-800 px-2 py-0.5 rounded">{project.source}</span>
-            {latestCase && <StatusBadge status={latestCase.decision || latestCase.status} />}
-          </div>
-          {project.notes && <p className="text-slate-400 text-sm mt-3">{project.notes}</p>}
+      {/* Header card */}
+      <div className="bg-slate-800 border border-slate-700 rounded-lg p-4 mb-4">
+        <h1 className="text-xl font-bold text-white break-words">{project.name}</h1>
+        {project.url && (
+          <a href={project.url} target="_blank" rel="noreferrer" className="text-blue-400 text-sm break-all hover:text-blue-300">
+            {project.url}
+          </a>
+        )}
+        <div className="flex flex-wrap items-center gap-2 mt-3">
+          <span className="text-xs text-slate-500 bg-slate-700 px-2 py-0.5 rounded">{project.source}</span>
+          {latestCase && <StatusBadge status={latestCase.decision || latestCase.status} />}
         </div>
+        {project.notes && <p className="text-slate-400 text-sm mt-3">{project.notes}</p>}
+      </div>
 
-        <div className="flex gap-2">
-          {latestCase?.status === 'report_ready' && (
-            <Link
-              to={`/projects/${id}/report/${latestCase.id}`}
-              className="bg-green-600 hover:bg-green-700 text-white text-sm font-medium px-4 py-2 rounded"
-            >
-              View Report
-            </Link>
-          )}
-          {(!latestCase || ['report_ready', 'go', 'hold', 'reject'].includes(latestCase.status)) && (
-            <button
-              className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded disabled:opacity-50"
-              onClick={() => startMutation.mutate()}
-              disabled={startMutation.isPending}
-            >
-              {startMutation.isPending ? 'Starting...' : latestCase ? 'Re-run Research' : 'Start Research'}
-            </button>
-          )}
-          <button
-            className="bg-slate-600 hover:bg-slate-500 text-white text-sm font-medium px-4 py-2 rounded disabled:opacity-50"
-            onClick={() => archiveMutation.mutate()}
-            disabled={archiveMutation.isPending}
+      {/* Actions */}
+      <div className="grid grid-cols-2 gap-2 mb-4">
+        {latestCase?.status === 'report_ready' && (
+          <Link
+            to={`/projects/${id}/report/${latestCase.id}`}
+            className="bg-green-600 hover:bg-green-700 text-white text-sm font-medium px-4 py-3 rounded-lg text-center"
           >
-            {archiveMutation.isPending ? '...' : 'Archive'}
+            View Report
+          </Link>
+        )}
+        {latestCase && ['go', 'hold', 'reject'].includes(latestCase.status) && (
+          <Link
+            to={`/projects/${id}/report/${latestCase.id}`}
+            className="bg-green-600 hover:bg-green-700 text-white text-sm font-medium px-4 py-3 rounded-lg text-center"
+          >
+            View Report
+          </Link>
+        )}
+        {(!latestCase || ['report_ready', 'go', 'hold', 'reject'].includes(latestCase.status)) && (
+          <button
+            className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-3 rounded-lg disabled:opacity-50"
+            onClick={() => startMutation.mutate()}
+            disabled={startMutation.isPending}
+          >
+            {startMutation.isPending ? 'Starting...' : latestCase ? 'Re-run Research' : 'Start Research'}
           </button>
-        </div>
+        )}
+        <button
+          className="bg-slate-700 hover:bg-slate-600 text-slate-300 text-sm font-medium px-4 py-3 rounded-lg disabled:opacity-50"
+          onClick={() => archiveMutation.mutate()}
+          disabled={archiveMutation.isPending}
+        >
+          {archiveMutation.isPending ? '...' : 'Archive'}
+        </button>
       </div>
 
       {startMutation.isError && (
@@ -103,23 +115,36 @@ export default function ProjectPage() {
 
       {/* Pipeline Progress */}
       {isRunning && status && (
-        <div className="bg-slate-800 border border-slate-700 rounded-lg p-4">
+        <div className="bg-slate-800 border border-slate-700 rounded-lg p-4 mb-4">
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-sm font-semibold text-slate-300">Pipeline Progress</h2>
             <span className="text-xs text-slate-500">{status.progress}</span>
           </div>
 
-          <div className="space-y-2">
+          <div className="space-y-3">
             {Object.entries(status.sections).map(([type, sec]) => (
-              <div key={type} className="flex items-center gap-3">
-                <span className="text-xs text-slate-400 w-32">{SECTION_LABELS[type] || type}</span>
-                <div className="flex-1 bg-slate-900 rounded-full h-2 overflow-hidden">
+              <div key={type}>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs text-slate-400">{SECTION_LABELS[type] || type}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-slate-500">iter {sec.iteration}</span>
+                    {sec.critic && (
+                      <span className={`text-xs px-1.5 py-0.5 rounded ${
+                        sec.critic === 'pass' ? 'text-green-400 bg-green-900/30' :
+                        sec.critic === 'fail' ? 'text-red-400 bg-red-900/30' :
+                        'text-yellow-400 bg-yellow-900/30'
+                      }`}>
+                        {sec.critic}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="bg-slate-900 rounded-full h-2 overflow-hidden">
                   <div
                     className={`h-full rounded-full transition-all duration-500 ${
-                      sec.status === 'completed' ? 'bg-green-500 w-full' :
-                      sec.status === 'in_progress' ? 'bg-blue-500 w-2/3 animate-pulse' :
-                      sec.status === 'pending' ? 'bg-slate-700 w-0' :
-                      'bg-slate-600 w-1/3'
+                      sec.status === 'completed' ? 'bg-green-500' :
+                      sec.status === 'in_progress' ? 'bg-blue-500 animate-pulse' :
+                      'bg-slate-700'
                     }`}
                     style={{
                       width: sec.status === 'completed' ? '100%' :
@@ -128,16 +153,6 @@ export default function ProjectPage() {
                     }}
                   />
                 </div>
-                <span className="text-xs text-slate-500 w-16 text-right">iter {sec.iteration}</span>
-                {sec.critic && (
-                  <span className={`text-xs px-1.5 py-0.5 rounded ${
-                    sec.critic === 'pass' ? 'text-green-400 bg-green-900/30' :
-                    sec.critic === 'fail' ? 'text-red-400 bg-red-900/30' :
-                    'text-yellow-400 bg-yellow-900/30'
-                  }`}>
-                    {sec.critic}
-                  </span>
-                )}
               </div>
             ))}
           </div>
@@ -154,16 +169,10 @@ export default function ProjectPage() {
         </div>
       )}
 
-      {/* Completed — link to report */}
+      {/* Completed — decision info */}
       {latestCase && ['go', 'hold', 'reject'].includes(latestCase.status) && (
         <div className="bg-slate-800 border border-slate-700 rounded-lg p-4 text-center">
-          <p className="text-slate-300 mb-2">Decision made: <StatusBadge status={latestCase.status} /></p>
-          <Link
-            to={`/projects/${id}/report/${latestCase.id}`}
-            className="text-blue-400 hover:text-blue-300 text-sm"
-          >
-            View full report &rarr;
-          </Link>
+          <p className="text-slate-300 mb-1">Decision: <StatusBadge status={latestCase.status} /></p>
         </div>
       )}
     </div>
