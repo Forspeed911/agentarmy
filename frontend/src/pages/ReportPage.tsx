@@ -65,9 +65,33 @@ function SectionCard({ section }: { section: SectionReport }) {
           )}
 
           {/* Content */}
-          {content.raw_text ? (
-            <pre className="text-xs text-slate-300 whitespace-pre-wrap leading-relaxed">{String(content.raw_text)}</pre>
-          ) : content.findings ? (
+          {content.raw_text ? (() => {
+            // Try to extract JSON from raw_text (LLM sometimes wraps JSON in text)
+            try {
+              const raw = String(content.raw_text);
+              const firstBrace = raw.indexOf('{');
+              const lastBrace = raw.lastIndexOf('}');
+              if (firstBrace !== -1 && lastBrace > firstBrace) {
+                const parsed = JSON.parse(raw.substring(firstBrace, lastBrace + 1));
+                if (parsed.findings) {
+                  return (
+                    <div className="space-y-3">
+                      {parsed.summary && <p className="text-sm text-slate-400 mb-3">{parsed.summary}</p>}
+                      {(parsed.findings as Array<Record<string, unknown>>).map((finding: Record<string, unknown>, i: number) => (
+                        <div key={i} className="text-sm">
+                          <p className="text-slate-300">{String(finding.claim || finding.insight || finding.finding || '')}</p>
+                          {Boolean(finding.source_url) && (
+                            <a href={String(finding.source_url)} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-400 hover:text-blue-300">{String(finding.source_url)}</a>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  );
+                }
+              }
+            } catch {}
+            return <pre className="text-xs text-slate-300 whitespace-pre-wrap leading-relaxed">{String(content.raw_text)}</pre>;
+          })() : content.findings ? (
             <div className="space-y-3">
               {(content.findings as Array<Record<string, unknown>>).map((finding, i) => (
                 <div key={i} className="text-sm">

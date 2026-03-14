@@ -141,12 +141,27 @@ export class LlmService {
   }
 
   private parseJson(raw: string): Record<string, any> {
-    // Try to extract JSON from markdown code blocks or raw text
-    const jsonMatch = raw.match(/```(?:json)?\s*([\s\S]*?)```/) || raw.match(/(\{[\s\S]*\})/);
-    const jsonStr = jsonMatch?.[1]?.trim() || raw.trim();
+    // Strategy 1: extract from markdown code block
+    const codeBlockMatch = raw.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (codeBlockMatch) {
+      try {
+        return JSON.parse(codeBlockMatch[1].trim());
+      } catch {}
+    }
 
+    // Strategy 2: find the outermost { ... } JSON object
+    const firstBrace = raw.indexOf('{');
+    const lastBrace = raw.lastIndexOf('}');
+    if (firstBrace !== -1 && lastBrace > firstBrace) {
+      const candidate = raw.substring(firstBrace, lastBrace + 1);
+      try {
+        return JSON.parse(candidate);
+      } catch {}
+    }
+
+    // Strategy 3: try parsing the whole string
     try {
-      return JSON.parse(jsonStr);
+      return JSON.parse(raw.trim());
     } catch {
       this.logger.warn('Failed to parse LLM JSON output, returning raw');
       return { raw_text: raw };
