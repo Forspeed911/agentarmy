@@ -1,12 +1,15 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { BullModule } from '@nestjs/bullmq';
+import { APP_GUARD } from '@nestjs/core';
 import { PrismaModule } from './prisma/prisma.module';
 import { SearchModule } from './search/search.module';
 import { LlmModule } from './llm/llm.module';
 import { ProjectsModule } from './projects/projects.module';
 import { ResearchModule } from './research/research.module';
 import { WorkersModule } from './workers/workers.module';
+import { AuthModule } from './auth/auth.module';
+import { JwtAuthGuard } from './auth/jwt-auth.guard';
 
 @Module({
   imports: [
@@ -25,6 +28,13 @@ import { WorkersModule } from './workers/workers.module';
     ProjectsModule,
     ResearchModule,
     WorkersModule,
+    AuthModule,
+  ],
+  providers: [
+    {
+      provide: APP_GUARD,
+      useExisting: JwtAuthGuard,
+    },
   ],
 })
 export class AppModule {}
