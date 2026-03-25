@@ -23,6 +23,134 @@ const SCORE_LABELS: Record<string, string> = {
   monetization: 'Monetization',
 }
 
+/** Extract a flat findings array from any LLM content shape */
+function extractFindings(obj: Record<string, unknown>): Array<Record<string, unknown>> | null {
+  // Direct findings array
+  if (Array.isArray(obj.findings)) return obj.findings
+  // Some LLMs nest items/results/risks as the main array
+  for (const key of ['items', 'results', 'risks', 'analysis', 'data']) {
+    if (Array.isArray(obj[key])) return obj[key] as Array<Record<string, unknown>>
+  }
+  // Look for the first array value in the object
+  for (const val of Object.values(obj)) {
+    if (Array.isArray(val) && val.length > 0 && typeof val[0] === 'object') {
+      return val as Array<Record<string, unknown>>
+    }
+  }
+  return null
+}
+
+/** Try to parse a JSON object from raw text */
+function tryParseJson(raw: string): Record<string, unknown> | null {
+  try {
+    const firstBrace = raw.indexOf('{')
+    const lastBrace = raw.lastIndexOf('}')
+    if (firstBrace !== -1 && lastBrace > firstBrace) {
+      return JSON.parse(raw.substring(firstBrace, lastBrace + 1))
+    }
+  } catch {}
+  return null
+}
+
+/** Get the display text from a finding object (tries common key names) */
+function findingText(f: Record<string, unknown>): string {
+  for (const key of ['claim', 'insight', 'finding', 'description', 'risk', 'title', 'name', 'text', 'summary']) {
+    if (f[key] && typeof f[key] === 'string') return f[key] as string
+  }
+  // If the finding has nested sub-fields but no obvious text key, join string values
+  const strings = Object.entries(f)
+    .filter(([k, v]) => typeof v === 'string' && k !== 'source_url' && k !== 'url' && k !== 'confidence')
+    .map(([, v]) => v as string)
+  return strings.join(' — ') || JSON.stringify(f)
+}
+
+function findingUrl(f: Record<string, unknown>): string | null {
+  const url = f.source_url || f.url || f.link || f.source
+  return typeof url === 'string' && url.startsWith('http') ? url : null
+}
+
+function findingMeta(f: Record<string, unknown>): string | null {
+  const parts: string[] = []
+  if (f.confidence) parts.push(`confidence: ${f.confidence}`)
+  if (f.severity) parts.push(`severity: ${f.severity}`)
+  if (f.level) parts.push(`level: ${f.level}`)
+  if (f.likelihood) parts.push(`likelihood: ${f.likelihood}`)
+  if (f.impact) parts.push(`impact: ${f.impact}`)
+  return parts.length > 0 ? parts.join(' · ') : null
+}
+
+function FindingsList({ findings, summary }: { findings: Array<Record<string, unknown>>; summary?: string }) {
+  return (
+    <div className="space-y-3">
+      {summary && <p className="text-sm text-slate-400 mb-3">{summary}</p>}
+      {findings.map((f, i) => {
+        const url = findingUrl(f)
+        const meta = findingMeta(f)
+        return (
+          <div key={i} className="text-sm">
+            <p className="text-slate-300">{findingText(f)}</p>
+            {meta && <p className="text-xs text-slate-500 mt-0.5">{meta}</p>}
+            {url && (
+              <a href={url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-400 hover:text-blue-300">{url}</a>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+/** Render any content object as readable blocks (last resort, better than JSON.stringify) */
+function ContentFallback({ content }: { content: Record<string, unknown> }) {
+  const entries = Object.entries(content).filter(([, v]) => v != null && v !== '')
+  return (
+    <div className="space-y-3">
+      {entries.map(([key, val]) => (
+        <div key={key}>
+          <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">{key.replace(/_/g, ' ')}</p>
+          {typeof val === 'string' ? (
+            <p className="text-sm text-slate-300">{val}</p>
+          ) : Array.isArray(val) ? (
+            <ul className="list-disc list-inside text-sm text-slate-300 space-y-1">
+              {val.map((item, i) => (
+                <li key={i}>{typeof item === 'string' ? item : JSON.stringify(item)}</li>
+              ))}
+            </ul>
+          ) : typeof val === 'object' ? (
+            <pre className="text-xs text-slate-400 whitespace-pre-wrap">{JSON.stringify(val, null, 2)}</pre>
+          ) : (
+            <p className="text-sm text-slate-300">{String(val)}</p>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function SectionContent({ content }: { content: Record<string, unknown> }) {
+  // 1. If raw_text — try to parse JSON from it, then render
+  if (content.raw_text) {
+    const parsed = tryParseJson(String(content.raw_text))
+    if (parsed) {
+      const findings = extractFindings(parsed)
+      if (findings) {
+        return <FindingsList findings={findings} summary={parsed.summary as string | undefined} />
+      }
+      return <ContentFallback content={parsed} />
+    }
+    return <pre className="text-xs text-slate-300 whitespace-pre-wrap leading-relaxed">{String(content.raw_text)}</pre>
+  }
+
+  // 2. Try to extract findings from content directly
+  const findings = extractFindings(content)
+  if (findings) {
+    return <FindingsList findings={findings} summary={content.summary as string | undefined} />
+  }
+
+  // 3. Render as readable key-value blocks (no more JSON.stringify)
+  return <ContentFallback content={content} />
+}
+
 function SectionCard({ section }: { section: SectionReport }) {
   const [expanded, setExpanded] = useState(false)
   const content = section.content as Record<string, unknown>
@@ -55,7 +183,6 @@ function SectionCard({ section }: { section: SectionReport }) {
 
       {expanded && (
         <div className="px-4 pb-4 border-t border-slate-700">
-          {/* Critic scores */}
           {section.critic && (
             <div className="flex gap-4 py-2 text-xs text-slate-400 border-b border-slate-700/50 mb-3">
               <span>Evidence: <b className="text-slate-300">{section.critic.evidenceQuality}/5</b></span>
@@ -63,58 +190,7 @@ function SectionCard({ section }: { section: SectionReport }) {
               <span>Completeness: <b className="text-slate-300">{section.critic.completeness}/5</b></span>
             </div>
           )}
-
-          {/* Content */}
-          {content.raw_text ? (() => {
-            // Try to extract JSON from raw_text (LLM sometimes wraps JSON in text)
-            try {
-              const raw = String(content.raw_text);
-              const firstBrace = raw.indexOf('{');
-              const lastBrace = raw.lastIndexOf('}');
-              if (firstBrace !== -1 && lastBrace > firstBrace) {
-                const parsed = JSON.parse(raw.substring(firstBrace, lastBrace + 1));
-                if (parsed.findings) {
-                  return (
-                    <div className="space-y-3">
-                      {parsed.summary && <p className="text-sm text-slate-400 mb-3">{parsed.summary}</p>}
-                      {(parsed.findings as Array<Record<string, unknown>>).map((finding: Record<string, unknown>, i: number) => (
-                        <div key={i} className="text-sm">
-                          <p className="text-slate-300">{String(finding.claim || finding.insight || finding.finding || '')}</p>
-                          {Boolean(finding.source_url) && (
-                            <a href={String(finding.source_url)} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-400 hover:text-blue-300">{String(finding.source_url)}</a>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  );
-                }
-              }
-            } catch {}
-            return <pre className="text-xs text-slate-300 whitespace-pre-wrap leading-relaxed">{String(content.raw_text)}</pre>;
-          })() : content.findings ? (
-            <div className="space-y-3">
-              {(content.findings as Array<Record<string, unknown>>).map((finding, i) => (
-                <div key={i} className="text-sm">
-                  <p className="text-slate-300"> {String(finding.claim || finding.insight || finding.finding || '')}</p>
-                  {Boolean(finding.source_url) && (
-                    <a
-                      href={String(finding.source_url)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-xs text-blue-400 hover:text-blue-300"
-                    >
-                      {String(finding.source_url)}
-                    </a>
-                  )}
-                </div>
-              ))}
-              {Boolean(content.summary) && (
-                <p className="text-sm text-slate-400 pt-2 border-t border-slate-700/50">{String(content.summary)}</p>
-              )}
-            </div>
-          ) : (
-            <pre className="text-xs text-slate-400 whitespace-pre-wrap">{JSON.stringify(content, null, 2)}</pre>
-          )}
+          <SectionContent content={content} />
         </div>
       )}
     </div>

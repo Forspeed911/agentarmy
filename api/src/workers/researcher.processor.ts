@@ -74,7 +74,7 @@ export class ResearcherProcessor extends WorkerHost {
         maxLoops: 8,
       });
 
-      const content = llmResult.content;
+      const content = this.normalizeContent(llmResult.content);
       const sourcesCount = Array.isArray(content.findings)
         ? content.findings.filter((f: any) => f.source_url).length
         : 0;
@@ -108,7 +108,7 @@ export class ResearcherProcessor extends WorkerHost {
       );
 
       await this.researchService.onSectionDone(caseId, sectionType);
-    } catch (error) {
+    } catch (error: any) {
       this.logger.error(`Research failed: ${sectionType}`, error);
       await this.prisma.agentRun.update({
         where: { id: run.id },
@@ -120,5 +120,36 @@ export class ResearcherProcessor extends WorkerHost {
       });
       throw error;
     }
+  }
+
+  /** Normalize LLM content to always have a findings array */
+  private normalizeContent(
+    content: Record<string, any>,
+  ): Record<string, any> {
+    if (Array.isArray(content.findings)) return content;
+
+    // LLM sometimes uses alternative keys instead of "findings"
+    for (const key of ['items', 'results', 'risks', 'analysis', 'data']) {
+      if (Array.isArray(content[key])) {
+        const { [key]: arr, ...rest } = content;
+        return { ...rest, findings: arr };
+      }
+    }
+
+    // Find the first array of objects
+    for (const [key, val] of Object.entries(content)) {
+      if (
+        key !== 'risks' &&
+        key !== 'opportunities' &&
+        Array.isArray(val) &&
+        val.length > 0 &&
+        typeof val[0] === 'object'
+      ) {
+        const { [key]: arr, ...rest } = content;
+        return { ...rest, findings: arr };
+      }
+    }
+
+    return content;
   }
 }
