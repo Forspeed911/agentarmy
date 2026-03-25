@@ -20,7 +20,10 @@ const WEIGHTS: Record<string, number> = {
   monetization: 0.1,
 };
 
-@Processor('scorer')
+@Processor('scorer', {
+  lockDuration: 180_000,
+  stalledInterval: 60_000,
+})
 export class ScorerProcessor extends WorkerHost {
   private readonly logger = new Logger(ScorerProcessor.name);
 

@@ -35,6 +35,15 @@ export class ResearchController {
     return this.researchService.getReport(projectId, caseId);
   }
 
+  @Post(':caseId/retry')
+  @HttpCode(202)
+  retryResearch(
+    @Param('projectId', ParseUUIDPipe) projectId: string,
+    @Param('caseId', ParseUUIDPipe) caseId: string,
+  ) {
+    return this.researchService.retryStalled(projectId, caseId);
+  }
+
   @Post(':caseId/decision')
   submitDecision(
     @Param('projectId', ParseUUIDPipe) projectId: string,

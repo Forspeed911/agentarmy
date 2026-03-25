@@ -17,7 +17,10 @@ interface ResearchJob {
   feedback: string | null;
 }
 
-@Processor('research')
+@Processor('research', {
+  lockDuration: 300_000, // 5 min — research can take a while
+  stalledInterval: 120_000, // check for stalled jobs every 2 min
+})
 export class ResearcherProcessor extends WorkerHost {
   private readonly logger = new Logger(ResearcherProcessor.name);
 
@@ -110,6 +113,13 @@ export class ResearcherProcessor extends WorkerHost {
       await this.researchService.onSectionDone(caseId, sectionType);
     } catch (error: any) {
       this.logger.error(`Research failed: ${sectionType}`, error);
+
+      // Mark section as failed so pipeline can continue
+      await this.prisma.researchSection.update({
+        where: { caseId_sectionType: { caseId, sectionType } },
+        data: { status: 'failed', completedAt: new Date() },
+      });
+
       await this.prisma.agentRun.update({
         where: { id: run.id },
         data: {
@@ -118,6 +128,10 @@ export class ResearcherProcessor extends WorkerHost {
           completedAt: new Date(),
         },
       });
+
+      // Notify pipeline even on failure — don't block other sections
+      await this.researchService.onSectionDone(caseId, sectionType);
+
       throw error;
     }
   }

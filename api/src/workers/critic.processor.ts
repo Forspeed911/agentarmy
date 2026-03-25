@@ -11,7 +11,10 @@ interface CriticJob {
   sectionTypes: string[];
 }
 
-@Processor('critic')
+@Processor('critic', {
+  lockDuration: 180_000, // 3 min
+  stalledInterval: 60_000,
+})
 export class CriticProcessor extends WorkerHost {
   private readonly logger = new Logger(CriticProcessor.name);
 

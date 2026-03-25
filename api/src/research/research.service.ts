@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
@@ -7,6 +7,8 @@ const SECTION_TYPES = ['market', 'competitor', 'signals', 'tech', 'risk'];
 
 @Injectable()
 export class ResearchService {
+  private readonly logger = new Logger(ResearchService.name);
+
   constructor(
     private prisma: PrismaService,
     @InjectQueue('research') private researchQueue: Queue,
@@ -166,25 +168,51 @@ export class ResearchService {
     });
   }
 
-  // Called by Pipeline Manager when a research section completes
+  // Called by Pipeline Manager when a research section completes (or fails)
   async onSectionDone(caseId: string, sectionType: string) {
     const sections = await this.prisma.researchSection.findMany({
       where: { caseId },
     });
 
-    const allDone = sections.every((s) => s.status === 'completed');
+    const allSettled = sections.every(
+      (s) => s.status === 'completed' || s.status === 'failed',
+    );
 
-    if (allDone) {
+    if (!allSettled) return;
+
+    const completedSections = sections.filter(
+      (s) => s.status === 'completed',
+    );
+    const failedSections = sections.filter((s) => s.status === 'failed');
+
+    if (failedSections.length > 0) {
+      this.logger.warn(
+        `Case ${caseId}: ${failedSections.length} section(s) failed: ${failedSections.map((s) => s.sectionType).join(', ')}`,
+      );
+    }
+
+    // Need at least 3 completed sections to proceed
+    if (completedSections.length < 3) {
       await this.prisma.researchCase.update({
         where: { id: caseId },
-        data: { status: 'critic_review' },
+        data: { status: 'failed' },
       });
-
-      await this.criticQueue.add('critic-review', {
-        caseId,
-        sectionTypes: SECTION_TYPES,
-      });
+      this.logger.error(
+        `Case ${caseId}: only ${completedSections.length}/5 sections completed — marking as failed`,
+      );
+      return;
     }
+
+    // Proceed to critic with whatever completed
+    await this.prisma.researchCase.update({
+      where: { id: caseId },
+      data: { status: 'critic_review' },
+    });
+
+    await this.criticQueue.add('critic-review', {
+      caseId,
+      sectionTypes: completedSections.map((s) => s.sectionType),
+    });
   }
 
   // Called by Pipeline Manager when critic finishes
@@ -242,6 +270,55 @@ export class ResearchService {
         data: { status: 'research_in_progress' },
       });
     }
+  }
+
+  // Retry stalled or failed research sections
+  async retryStalled(projectId: string, caseId: string) {
+    const researchCase = await this.prisma.researchCase.findUniqueOrThrow({
+      where: { id: caseId },
+    });
+
+    const sections = await this.prisma.researchSection.findMany({
+      where: { caseId },
+    });
+
+    const stuckSections = sections.filter(
+      (s) => s.status === 'in_progress' || s.status === 'failed',
+    );
+
+    if (stuckSections.length === 0) {
+      return { message: 'No stuck sections found', status: researchCase.status };
+    }
+
+    // Reset stuck sections and re-queue
+    for (const section of stuckSections) {
+      await this.prisma.researchSection.update({
+        where: { caseId_sectionType: { caseId, sectionType: section.sectionType } },
+        data: { status: 'pending', startedAt: null, completedAt: null },
+      });
+
+      await this.researchQueue.add('research-section', {
+        projectId,
+        caseId,
+        sectionType: section.sectionType,
+        iteration: section.iteration,
+        feedback: null,
+      });
+    }
+
+    await this.prisma.researchCase.update({
+      where: { id: caseId },
+      data: { status: 'research_in_progress' },
+    });
+
+    this.logger.log(
+      `Retrying ${stuckSections.length} stuck section(s) for case ${caseId}: ${stuckSections.map((s) => s.sectionType).join(', ')}`,
+    );
+
+    return {
+      retried: stuckSections.map((s) => s.sectionType),
+      status: 'research_in_progress',
+    };
   }
 
   // Called when scorer finishes

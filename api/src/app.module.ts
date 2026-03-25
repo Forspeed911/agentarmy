@@ -21,6 +21,12 @@ import { JwtAuthGuard } from './auth/jwt-auth.guard';
         maxRetriesPerRequest: null,
         retryStrategy: (times: number) => Math.min(times * 500, 5000),
       },
+      defaultJobOptions: {
+        attempts: 2,
+        backoff: { type: 'exponential', delay: 10_000 },
+        removeOnComplete: 100,
+        removeOnFail: 50,
+      },
     }),
     PrismaModule,
     SearchModule,

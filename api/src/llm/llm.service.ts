@@ -38,6 +38,7 @@ export class LlmService {
   constructor(private searchService: SearchService) {
     this.client = new Anthropic({
       apiKey: process.env.ANT_API_KEY || 'dummy',
+      timeout: 120_000, // 2 min per API call
     });
     this.model = process.env.LLM_MODEL || 'claude-sonnet-4-6';
   }
