@@ -190,14 +190,21 @@ export default function ProjectPage() {
             ))}
           </div>
 
-          <div className="mt-3 flex items-center gap-2">
-            <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
-            <span className="text-xs text-slate-500">
-              {status.status === 'research_in_progress' ? 'Agents researching...' :
-               status.status === 'critic_review' ? 'Critic reviewing...' :
-               status.status === 'scoring' ? 'Computing scores...' :
-               status.status}
-            </span>
+          <div className="mt-3 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
+              <span className="text-xs text-slate-500">
+                {status.status === 'research_in_progress' ? 'Agents researching...' :
+                 status.status === 'critic_review' ? 'Critic reviewing...' :
+                 status.status === 'scoring' ? 'Computing scores...' :
+                 status.status}
+              </span>
+            </div>
+            {(status as any).cost && (
+              <span className="text-xs text-slate-500">
+                {(status as any).cost.totalTokens.toLocaleString()} tok · ${(status as any).cost.totalCostUsd.toFixed(4)}
+              </span>
+            )}
           </div>
         </div>
       )}

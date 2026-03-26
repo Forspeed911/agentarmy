@@ -321,6 +321,18 @@ export default function ReportPage() {
         </div>
       )}
 
+      {/* Cost */}
+      {(report as any).cost && (
+        <div className="bg-slate-800/50 border border-slate-700 rounded-lg px-4 py-3 mb-6 flex items-center justify-between">
+          <span className="text-xs text-slate-500">Research cost</span>
+          <div className="flex items-center gap-4 text-xs">
+            <span className="text-slate-400">{(report as any).cost.totalTokens.toLocaleString()} tokens</span>
+            <span className="text-slate-400">{(report as any).cost.llmCalls} LLM calls</span>
+            <span className="text-slate-300 font-medium">${(report as any).cost.totalCostUsd.toFixed(4)}</span>
+          </div>
+        </div>
+      )}
+
       {/* Research Sections */}
       <div className="space-y-2 mb-6">
         <h2 className="text-sm font-semibold text-slate-400 mb-2">Research Sections</h2>

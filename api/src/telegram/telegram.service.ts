@@ -57,6 +57,7 @@ export class TelegramService {
     strongSections: string[];
     weakSections: string[];
     reasoning: string;
+    cost?: { totalTokens: number; totalCostUsd: number; llmCalls: number };
   }): Promise<void> {
     const emoji =
       data.recommendation === 'go'
@@ -79,6 +80,10 @@ export class TelegramService {
     }
 
     lines.push('', data.reasoning);
+
+    if (data.cost) {
+      lines.push('', `💰 ${data.cost.totalTokens.toLocaleString()} tok · $${data.cost.totalCostUsd.toFixed(4)} · ${data.cost.llmCalls} calls`);
+    }
 
     if (data.projectUrl) {
       lines.push('', `URL: ${data.projectUrl}`);

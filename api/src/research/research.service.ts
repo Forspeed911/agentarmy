@@ -6,6 +6,15 @@ import { Queue } from 'bullmq';
 
 const SECTION_TYPES = ['market', 'competitor', 'signals', 'tech', 'risk'];
 
+// Anthropic pricing per million tokens (USD)
+const MODEL_PRICING: Record<string, { input: number; output: number }> = {
+  'claude-sonnet-4-6': { input: 3, output: 15 },
+  'claude-sonnet-4-5': { input: 3, output: 15 },
+  'claude-opus-4-6': { input: 5, output: 25 },
+  'claude-opus-4-5': { input: 5, output: 25 },
+  'claude-haiku-4-5': { input: 1, output: 5 },
+};
+
 @Injectable()
 export class ResearchService {
   private readonly logger = new Logger(ResearchService.name);
@@ -17,6 +26,39 @@ export class ResearchService {
     @InjectQueue('critic') private criticQueue: Queue,
     @InjectQueue('scorer') private scorerQueue: Queue,
   ) {}
+
+  private async getCaseCost(caseId: string) {
+    const runs = await this.prisma.agentRun.findMany({
+      where: { caseId },
+      select: {
+        inputTokens: true,
+        outputTokens: true,
+        llmModel: true,
+      },
+    });
+
+    let totalInputTokens = 0;
+    let totalOutputTokens = 0;
+    let totalCostUsd = 0;
+
+    for (const run of runs) {
+      const input = run.inputTokens ?? 0;
+      const output = run.outputTokens ?? 0;
+      totalInputTokens += input;
+      totalOutputTokens += output;
+
+      const pricing = MODEL_PRICING[run.llmModel ?? ''] ?? MODEL_PRICING['claude-sonnet-4-6'];
+      totalCostUsd += (input / 1_000_000) * pricing.input + (output / 1_000_000) * pricing.output;
+    }
+
+    return {
+      totalInputTokens,
+      totalOutputTokens,
+      totalTokens: totalInputTokens + totalOutputTokens,
+      totalCostUsd: Math.round(totalCostUsd * 10000) / 10000, // 4 decimals
+      llmCalls: runs.length,
+    };
+  }
 
   async startResearch(projectId: string) {
     // Verify project exists
@@ -95,11 +137,14 @@ export class ResearchService {
       (s) => s.status === 'completed',
     ).length;
 
+    const cost = await this.getCaseCost(caseId);
+
     return {
       caseId: researchCase.id,
       status: researchCase.status,
       sections,
       progress: `${completed}/${SECTION_TYPES.length} sections completed`,
+      cost,
     };
   }
 
@@ -150,6 +195,7 @@ export class ResearchService {
           }
         : null,
       status: researchCase.status,
+      cost: await this.getCaseCost(caseId),
     };
   }
 
@@ -442,6 +488,7 @@ export class ResearchService {
     });
 
     if (researchCase?.scoring) {
+      const cost = await this.getCaseCost(caseId);
       this.telegram.notifyResearchDone({
         projectName: researchCase.project.name,
         projectUrl: researchCase.project.url ?? undefined,
@@ -451,6 +498,7 @@ export class ResearchService {
         strongSections: researchCase.scoring.strongSections as string[],
         weakSections: researchCase.scoring.weakSections as string[],
         reasoning: researchCase.scoring.reasoning ?? '',
+        cost,
       });
     }
   }
