@@ -15,6 +15,7 @@ interface ResearchJob {
   sectionType: string;
   iteration: number;
   feedback: string | null;
+  generation?: number;
 }
 
 @Processor('research', {
@@ -33,10 +34,21 @@ export class ResearcherProcessor extends WorkerHost {
   }
 
   async process(job: Job<ResearchJob>) {
-    const { projectId, caseId, sectionType, iteration, feedback } = job.data;
+    const { projectId, caseId, sectionType, iteration, feedback, generation } = job.data;
     this.logger.log(
-      `Research: ${sectionType} iter=${iteration} case=${caseId}`,
+      `Research: ${sectionType} iter=${iteration} gen=${generation ?? '?'} case=${caseId}`,
     );
+
+    // Guard: skip if case was restarted (generation mismatch)
+    if (generation != null) {
+      const currentCase = await this.prisma.researchCase.findUnique({ where: { id: caseId } });
+      if (currentCase && currentCase.generation !== generation) {
+        this.logger.warn(
+          `Skipping stale job: ${sectionType} gen=${generation}, current=${currentCase.generation}`,
+        );
+        return;
+      }
+    }
 
     const startedAt = new Date();
 
@@ -76,6 +88,15 @@ export class ResearcherProcessor extends WorkerHost {
         tools: true,
         maxLoops: 8,
       });
+
+      // Re-check generation before writing results (restart may have happened during LLM call)
+      if (generation != null) {
+        const freshCase = await this.prisma.researchCase.findUnique({ where: { id: caseId } });
+        if (freshCase && freshCase.generation !== generation) {
+          this.logger.warn(`Discarding result: ${sectionType} gen=${generation}, current=${freshCase.generation}`);
+          return;
+        }
+      }
 
       const content = this.normalizeContent(llmResult.content);
       const sourcesCount = Array.isArray(content.findings)

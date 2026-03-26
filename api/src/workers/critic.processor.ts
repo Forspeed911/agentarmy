@@ -9,6 +9,7 @@ import { buildCriticSystemPrompt, buildCriticUserPrompt } from '../llm/prompts/c
 interface CriticJob {
   caseId: string;
   sectionTypes: string[];
+  generation?: number;
 }
 
 @Processor('critic', {
@@ -27,8 +28,17 @@ export class CriticProcessor extends WorkerHost {
   }
 
   async process(job: Job<CriticJob>) {
-    const { caseId } = job.data;
-    this.logger.log(`Critic review: case=${caseId}`);
+    const { caseId, generation } = job.data;
+    this.logger.log(`Critic review: case=${caseId} gen=${generation ?? '?'}`);
+
+    // Guard: skip if case was restarted
+    if (generation != null) {
+      const currentCase = await this.prisma.researchCase.findUnique({ where: { id: caseId } });
+      if (currentCase && currentCase.generation !== generation) {
+        this.logger.warn(`Skipping stale critic job: gen=${generation}, current=${currentCase.generation}`);
+        return;
+      }
+    }
 
     const run = await this.prisma.agentRun.create({
       data: {

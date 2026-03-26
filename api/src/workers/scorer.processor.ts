@@ -8,6 +8,7 @@ import { buildScorerSystemPrompt, buildScorerUserPrompt } from '../llm/prompts/s
 
 interface ScorerJob {
   caseId: string;
+  generation?: number;
 }
 
 const WEIGHTS: Record<string, number> = {
@@ -36,8 +37,17 @@ export class ScorerProcessor extends WorkerHost {
   }
 
   async process(job: Job<ScorerJob>) {
-    const { caseId } = job.data;
-    this.logger.log(`Scoring: case=${caseId}`);
+    const { caseId, generation } = job.data;
+    this.logger.log(`Scoring: case=${caseId} gen=${generation ?? '?'}`);
+
+    // Guard: skip if case was restarted
+    if (generation != null) {
+      const currentCase = await this.prisma.researchCase.findUnique({ where: { id: caseId } });
+      if (currentCase && currentCase.generation !== generation) {
+        this.logger.warn(`Skipping stale scorer job: gen=${generation}, current=${currentCase.generation}`);
+        return;
+      }
+    }
 
     const run = await this.prisma.agentRun.create({
       data: {

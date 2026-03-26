@@ -25,6 +25,7 @@ model ResearchCase {
   id              String    @id @default(uuid()) @db.Uuid
   projectId       String    @map("project_id") @db.Uuid
   status          String    @default("created")
+  generation      Int       @default(1)
   decision        String?
   decisionComment String?   @map("decision_comment")
   decidedAt       DateTime? @map("decided_at")

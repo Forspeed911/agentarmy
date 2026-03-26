@@ -93,6 +93,7 @@ export class ResearchService {
           sectionType,
           iteration: 1,
           feedback: null,
+          generation: 1,
         }),
       ),
     );
@@ -240,6 +241,10 @@ export class ResearchService {
     }
 
     // Always proceed — even partial results are valuable
+    const researchCase = await this.prisma.researchCase.findUnique({
+      where: { id: caseId },
+    });
+
     await this.prisma.researchCase.update({
       where: { id: caseId },
       data: { status: 'critic_review' },
@@ -248,6 +253,7 @@ export class ResearchService {
     await this.criticQueue.add('critic-review', {
       caseId,
       sectionTypes: completedSections.map((s) => s.sectionType),
+      generation: researchCase?.generation ?? 1,
     });
   }
 
@@ -295,6 +301,7 @@ export class ResearchService {
             sectionType,
             iteration: section.iteration + 1,
             feedback: review.feedback,
+            generation: researchCase?.generation ?? 1,
           });
         } else {
           // Max iterations reached — accept as-is
@@ -312,7 +319,7 @@ export class ResearchService {
         data: { status: 'scoring' },
       });
 
-      await this.scorerQueue.add('score', { caseId });
+      await this.scorerQueue.add('score', { caseId, generation: researchCase?.generation ?? 1 });
     } else {
       // Some sections retrying
       this.logger.log(`Retrying sections: ${retryingSections.join(', ')}`);
@@ -354,6 +361,7 @@ export class ResearchService {
         sectionType: section.sectionType,
         iteration: section.iteration,
         feedback: null,
+        generation: researchCase.generation,
       });
     }
 
@@ -443,6 +451,9 @@ export class ResearchService {
       },
     });
 
+    // Increment generation — all old jobs with previous generation will be discarded
+    const newGeneration = researchCase.generation + 1;
+
     // Re-queue all sections
     await Promise.all(
       SECTION_TYPES.map((sectionType) =>
@@ -452,6 +463,7 @@ export class ResearchService {
           sectionType,
           iteration: 1,
           feedback: null,
+          generation: newGeneration,
         }),
       ),
     );
@@ -460,13 +472,14 @@ export class ResearchService {
       where: { id: caseId },
       data: {
         status: 'research_in_progress',
+        generation: newGeneration,
         decision: null,
         decisionComment: null,
         decidedAt: null,
       },
     });
 
-    this.logger.log(`Research ${caseId} restarted from scratch`);
+    this.logger.log(`Research ${caseId} restarted (gen ${newGeneration})`);
 
     return {
       caseId,
