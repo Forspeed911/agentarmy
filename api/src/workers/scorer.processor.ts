@@ -94,7 +94,8 @@ export class ScorerProcessor extends WorkerHost {
         })),
       );
 
-      const llmResult = await this.llm.completeSimple(systemPrompt, userPrompt);
+      const scorerModel = process.env.SCORER_MODEL || process.env.LLM_MODEL || 'claude-haiku-4-5-20251001';
+      const llmResult = await this.llm.completeSimple(systemPrompt, userPrompt, { model: scorerModel });
 
       const scores = llmResult.content.scores || {};
       const totalScore = Object.entries(scores).reduce(
@@ -123,6 +124,7 @@ export class ScorerProcessor extends WorkerHost {
           status: 'completed',
           completedAt: new Date(),
           durationMs: Date.now() - run.startedAt.getTime(),
+          llmModel: scorerModel,
           inputTokens: llmResult.tokensIn,
           outputTokens: llmResult.tokensOut,
         },

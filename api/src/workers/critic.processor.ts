@@ -69,7 +69,8 @@ export class CriticProcessor extends WorkerHost {
         })),
       );
 
-      const llmResult = await this.llm.completeSimple(systemPrompt, userPrompt);
+      const criticModel = process.env.CRITIC_MODEL || process.env.LLM_MODEL || 'claude-haiku-4-5-20251001';
+      const llmResult = await this.llm.completeSimple(systemPrompt, userPrompt, { model: criticModel });
 
       // Parse reviews array
       const reviews = Array.isArray(llmResult.content)
@@ -104,6 +105,7 @@ export class CriticProcessor extends WorkerHost {
           status: 'completed',
           completedAt: new Date(),
           durationMs: Date.now() - run.startedAt.getTime(),
+          llmModel: criticModel,
           inputTokens: llmResult.tokensIn,
           outputTokens: llmResult.tokensOut,
         },

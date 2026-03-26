@@ -50,10 +50,11 @@ export class LlmService {
   async complete(
     systemPrompt: string,
     userPrompt: string,
-    options?: { tools?: boolean; maxLoops?: number },
+    options?: { tools?: boolean; maxLoops?: number; model?: string },
   ): Promise<LlmResponse> {
     const useTools = options?.tools ?? false;
     const maxLoops = options?.maxLoops ?? 5;
+    const activeModel = options?.model || this.model;
     const tools = useTools ? [WEB_SEARCH_TOOL] : [];
 
     let totalTokensIn = 0;
@@ -65,10 +66,10 @@ export class LlmService {
     ];
 
     for (let loop = 0; loop < maxLoops; loop++) {
-      this.logger.log(`LLM call #${loop + 1} (model=${this.model})`);
+      this.logger.log(`LLM call #${loop + 1} (model=${activeModel})`);
 
       const response = await this.client.messages.create({
-        model: this.model,
+        model: activeModel,
         max_tokens: 4096,
         system: systemPrompt,
         messages,
@@ -137,8 +138,9 @@ export class LlmService {
   async completeSimple(
     systemPrompt: string,
     userPrompt: string,
+    options?: { model?: string },
   ): Promise<LlmResponse> {
-    return this.complete(systemPrompt, userPrompt, { tools: false });
+    return this.complete(systemPrompt, userPrompt, { tools: false, model: options?.model });
   }
 
   private parseJson(raw: string): Record<string, any> {

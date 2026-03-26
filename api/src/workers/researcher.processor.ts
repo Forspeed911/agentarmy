@@ -84,9 +84,11 @@ export class ResearcherProcessor extends WorkerHost {
         feedback,
       );
 
+      const researcherModel = process.env.RESEARCHER_MODEL || process.env.LLM_MODEL || 'claude-haiku-4-5-20251001';
       const llmResult = await this.llm.complete(systemPrompt, userPrompt, {
         tools: true,
         maxLoops: 8,
+        model: researcherModel,
       });
 
       // Re-check generation before writing results (restart may have happened during LLM call)
@@ -121,7 +123,7 @@ export class ResearcherProcessor extends WorkerHost {
           status: 'completed',
           completedAt: new Date(),
           durationMs: Date.now() - startedAt.getTime(),
-          llmModel: process.env.LLM_MODEL || 'claude-sonnet-4-6',
+          llmModel: researcherModel,
           inputTokens: llmResult.tokensIn,
           outputTokens: llmResult.tokensOut,
         },
