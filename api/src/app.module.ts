@@ -10,6 +10,7 @@ import { ResearchModule } from './research/research.module';
 import { WorkersModule } from './workers/workers.module';
 import { AuthModule } from './auth/auth.module';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
+import { TelegramModule } from './telegram/telegram.module';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { JwtAuthGuard } from './auth/jwt-auth.guard';
     ResearchModule,
     WorkersModule,
     AuthModule,
+    TelegramModule,
   ],
   providers: [
     {

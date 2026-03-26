@@ -1,5 +1,6 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { TelegramService } from '../telegram/telegram.service';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 
@@ -11,6 +12,7 @@ export class ResearchService {
 
   constructor(
     private prisma: PrismaService,
+    private telegram: TelegramService,
     @InjectQueue('research') private researchQueue: Queue,
     @InjectQueue('critic') private criticQueue: Queue,
     @InjectQueue('scorer') private scorerQueue: Queue,
@@ -200,6 +202,20 @@ export class ResearchService {
       this.logger.error(
         `Case ${caseId}: only ${completedSections.length}/5 sections completed — marking as failed`,
       );
+
+      const researchCase = await this.prisma.researchCase.findUnique({
+        where: { id: caseId },
+        include: { project: true },
+      });
+      if (researchCase) {
+        this.telegram.notifyResearchFailed({
+          projectName: researchCase.project.name,
+          caseId,
+          failedSections: failedSections.map((s) => s.sectionType),
+          completedCount: completedSections.length,
+          totalCount: SECTION_TYPES.length,
+        });
+      }
       return;
     }
 
@@ -327,5 +343,23 @@ export class ResearchService {
       where: { id: caseId },
       data: { status: 'report_ready' },
     });
+
+    const researchCase = await this.prisma.researchCase.findUnique({
+      where: { id: caseId },
+      include: { project: true, scoring: true },
+    });
+
+    if (researchCase?.scoring) {
+      this.telegram.notifyResearchDone({
+        projectName: researchCase.project.name,
+        projectUrl: researchCase.project.url ?? undefined,
+        caseId,
+        totalScore: Number(researchCase.scoring.totalScore),
+        recommendation: researchCase.scoring.recommendation,
+        strongSections: researchCase.scoring.strongSections as string[],
+        weakSections: researchCase.scoring.weakSections as string[],
+        reasoning: researchCase.scoring.reasoning ?? '',
+      });
+    }
   }
 }
