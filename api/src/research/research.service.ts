@@ -326,6 +326,109 @@ export class ResearchService {
     };
   }
 
+  // Force-stop a research: drain all queued jobs for this case, mark as stopped
+  async stopResearch(projectId: string, caseId: string) {
+    const researchCase = await this.prisma.researchCase.findUniqueOrThrow({
+      where: { id: caseId },
+    });
+
+    // Remove pending jobs from all queues for this case
+    for (const queue of [this.researchQueue, this.criticQueue, this.scorerQueue]) {
+      const jobs = await queue.getJobs(['waiting', 'delayed', 'active']);
+      for (const job of jobs) {
+        if (job.data?.caseId === caseId) {
+          try {
+            await job.remove();
+            this.logger.log(`Removed job ${job.id} from ${queue.name}`);
+          } catch {
+            // Active jobs can't always be removed — that's ok
+          }
+        }
+      }
+    }
+
+    // Mark all in-progress/pending sections as stopped
+    await this.prisma.researchSection.updateMany({
+      where: {
+        caseId,
+        status: { in: ['pending', 'in_progress'] },
+      },
+      data: { status: 'failed', completedAt: new Date() },
+    });
+
+    await this.prisma.researchCase.update({
+      where: { id: caseId },
+      data: { status: 'stopped' },
+    });
+
+    this.logger.log(`Research ${caseId} force-stopped`);
+
+    return { caseId, status: 'stopped' };
+  }
+
+  // Restart a research from scratch: stop current, reset all sections, re-queue
+  async restartResearch(projectId: string, caseId: string) {
+    // Stop first if still running
+    const researchCase = await this.prisma.researchCase.findUniqueOrThrow({
+      where: { id: caseId },
+    });
+
+    const activeStatuses = [
+      'research_queued', 'research_in_progress', 'critic_review', 'scoring',
+    ];
+    if (activeStatuses.includes(researchCase.status)) {
+      await this.stopResearch(projectId, caseId);
+    }
+
+    // Delete old reviews and scoring
+    await this.prisma.criticReview.deleteMany({ where: { caseId } });
+    await this.prisma.scoringResult.deleteMany({ where: { caseId } });
+
+    // Reset all sections to pending, iteration 1
+    await this.prisma.researchSection.updateMany({
+      where: { caseId },
+      data: {
+        status: 'pending',
+        iteration: 1,
+        content: {},
+        sourcesCount: 0,
+        startedAt: null,
+        completedAt: null,
+      },
+    });
+
+    // Re-queue all sections
+    await Promise.all(
+      SECTION_TYPES.map((sectionType) =>
+        this.researchQueue.add('research-section', {
+          projectId,
+          caseId,
+          sectionType,
+          iteration: 1,
+          feedback: null,
+        }),
+      ),
+    );
+
+    await this.prisma.researchCase.update({
+      where: { id: caseId },
+      data: {
+        status: 'research_in_progress',
+        decision: null,
+        decisionComment: null,
+        decidedAt: null,
+      },
+    });
+
+    this.logger.log(`Research ${caseId} restarted from scratch`);
+
+    return {
+      caseId,
+      status: 'research_in_progress',
+      sections: SECTION_TYPES,
+    };
+  }
+
   // Called when scorer finishes
   async onScoringDone(caseId: string) {
     await this.prisma.researchCase.update({

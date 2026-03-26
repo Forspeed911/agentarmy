@@ -44,6 +44,24 @@ export class ResearchController {
     return this.researchService.retryStalled(projectId, caseId);
   }
 
+  @Post(':caseId/stop')
+  @HttpCode(200)
+  stopResearch(
+    @Param('projectId', ParseUUIDPipe) projectId: string,
+    @Param('caseId', ParseUUIDPipe) caseId: string,
+  ) {
+    return this.researchService.stopResearch(projectId, caseId);
+  }
+
+  @Post(':caseId/restart')
+  @HttpCode(202)
+  restartResearch(
+    @Param('projectId', ParseUUIDPipe) projectId: string,
+    @Param('caseId', ParseUUIDPipe) caseId: string,
+  ) {
+    return this.researchService.restartResearch(projectId, caseId);
+  }
+
   @Post(':caseId/decision')
   submitDecision(
     @Param('projectId', ParseUUIDPipe) projectId: string,
