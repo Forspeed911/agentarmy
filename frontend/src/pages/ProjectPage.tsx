@@ -26,7 +26,7 @@ export default function ProjectPage() {
   const statusQuery = useQuery({
     queryKey: ['research-status', id, latestCase?.id],
     queryFn: () => api.research.status(id!, latestCase!.id),
-    enabled: !!latestCase && !['report_ready', 'go', 'hold', 'reject', 'created'].includes(latestCase.status),
+    enabled: !!latestCase && !['report_ready', 'go', 'hold', 'reject', 'created', 'stopped', 'failed'].includes(latestCase.status),
     refetchInterval: 3000,
   })
 
@@ -34,6 +34,20 @@ export default function ProjectPage() {
 
   const startMutation = useMutation({
     mutationFn: () => api.research.start(id!),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['project', id] })
+    },
+  })
+
+  const stopMutation = useMutation({
+    mutationFn: () => api.research.stop(id!, latestCase!.id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['project', id] })
+    },
+  })
+
+  const restartMutation = useMutation({
+    mutationFn: () => api.research.restart(id!, latestCase!.id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['project', id] })
     },
@@ -52,7 +66,8 @@ export default function ProjectPage() {
   if (!project) return null
 
   const status = statusQuery.data
-  const isRunning = latestCase && !['report_ready', 'go', 'hold', 'reject'].includes(latestCase.status) && latestCase.status !== 'created'
+  const isRunning = latestCase && ['research_queued', 'research_in_progress', 'critic_review', 'scoring'].includes(latestCase.status)
+  const canRestart = latestCase && ['stopped', 'failed', 'report_ready', 'go', 'hold', 'reject'].includes(latestCase.status)
 
   return (
     <div className="max-w-2xl mx-auto">
@@ -91,13 +106,31 @@ export default function ProjectPage() {
             View Report
           </Link>
         )}
-        {(!latestCase || ['report_ready', 'go', 'hold', 'reject'].includes(latestCase.status)) && (
+        {!latestCase && (
           <button
             className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-3 rounded-lg disabled:opacity-50"
             onClick={() => startMutation.mutate()}
             disabled={startMutation.isPending}
           >
-            {startMutation.isPending ? 'Starting...' : latestCase ? 'Re-run Research' : 'Start Research'}
+            {startMutation.isPending ? 'Starting...' : 'Start Research'}
+          </button>
+        )}
+        {isRunning && (
+          <button
+            className="bg-red-600 hover:bg-red-700 text-white text-sm font-medium px-4 py-3 rounded-lg disabled:opacity-50"
+            onClick={() => stopMutation.mutate()}
+            disabled={stopMutation.isPending}
+          >
+            {stopMutation.isPending ? 'Stopping...' : 'Stop'}
+          </button>
+        )}
+        {canRestart && (
+          <button
+            className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-3 rounded-lg disabled:opacity-50"
+            onClick={() => restartMutation.mutate()}
+            disabled={restartMutation.isPending}
+          >
+            {restartMutation.isPending ? 'Restarting...' : 'Restart Research'}
           </button>
         )}
         <button

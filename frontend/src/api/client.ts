@@ -102,6 +102,10 @@ export const api = {
         method: 'POST',
         body: JSON.stringify({ decision, comment }),
       }),
+    stop: (projectId: string, caseId: string) =>
+      request(`/projects/${projectId}/research/${caseId}/stop`, { method: 'POST' }),
+    restart: (projectId: string, caseId: string) =>
+      request(`/projects/${projectId}/research/${caseId}/restart`, { method: 'POST' }),
   },
 };
 
