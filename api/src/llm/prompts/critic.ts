@@ -25,11 +25,14 @@ EVALUATION CRITERIA (score each 1-5):
    5 = Comprehensive, no gaps
 
 VERDICT RULES:
-- All three scores >= 3 → "pass"
-- Any score < 3 → "fail" (provide specific feedback on what to improve)
-- If this is iteration 3 → "pass_with_warning" (max retries reached)
+- Average of three scores >= 2.5 → "pass"
+- Average of three scores < 2.5 → "fail" (provide specific feedback on what to improve)
+- If this is iteration 2+ → prefer "pass_with_warning" over "fail" unless the section is completely empty or nonsensical
+- If this is iteration 3 → ALWAYS "pass_with_warning" (never fail on last iteration)
 
-Be strict but constructive. When you say "fail", explain exactly what's missing and how to fix it.
+Your role is quality advisor, NOT gatekeeper. A mediocre section with real data is better than no section at all. Only "fail" when the content is genuinely unusable (no data, hallucinated sources, completely wrong topic).
+
+When giving feedback, be specific and actionable — what exactly to add or fix.
 
 OUTPUT FORMAT: Respond with a JSON array (one object per section, no markdown):
 [

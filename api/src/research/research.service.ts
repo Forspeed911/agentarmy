@@ -193,33 +193,7 @@ export class ResearchService {
       );
     }
 
-    // Need at least 3 completed sections to proceed
-    if (completedSections.length < 3) {
-      await this.prisma.researchCase.update({
-        where: { id: caseId },
-        data: { status: 'failed' },
-      });
-      this.logger.error(
-        `Case ${caseId}: only ${completedSections.length}/5 sections completed — marking as failed`,
-      );
-
-      const researchCase = await this.prisma.researchCase.findUnique({
-        where: { id: caseId },
-        include: { project: true },
-      });
-      if (researchCase) {
-        this.telegram.notifyResearchFailed({
-          projectName: researchCase.project.name,
-          caseId,
-          failedSections: failedSections.map((s) => s.sectionType),
-          completedCount: completedSections.length,
-          totalCount: SECTION_TYPES.length,
-        });
-      }
-      return;
-    }
-
-    // Proceed to critic with whatever completed
+    // Always proceed — even partial results are valuable
     await this.prisma.researchCase.update({
       where: { id: caseId },
       data: { status: 'critic_review' },
@@ -246,7 +220,11 @@ export class ResearchService {
       }
     }
 
-    const failedSections: string[] = [];
+    const retryingSections: string[] = [];
+    const researchCase = await this.prisma.researchCase.findUnique({
+      where: { id: caseId },
+    });
+
     for (const [sectionType, review] of latestReviews) {
       if (review.verdict === 'fail') {
         const section = await this.prisma.researchSection.findUnique({
@@ -254,25 +232,35 @@ export class ResearchService {
         });
 
         if (section && section.iteration < 3) {
-          failedSections.push(sectionType);
+          retryingSections.push(sectionType);
+
+          this.logger.log(
+            `Retrying ${sectionType} iter ${section.iteration + 1} (critic fail)`,
+          );
+
+          await this.prisma.researchSection.update({
+            where: { caseId_sectionType: { caseId, sectionType } },
+            data: { status: 'pending' },
+          });
 
           await this.researchQueue.add('research-section', {
-            projectId: (
-              await this.prisma.researchCase.findUnique({
-                where: { id: caseId },
-              })
-            )?.projectId,
+            projectId: researchCase?.projectId,
             caseId,
             sectionType,
             iteration: section.iteration + 1,
             feedback: review.feedback,
           });
+        } else {
+          // Max iterations reached — accept as-is
+          this.logger.warn(
+            `${sectionType} failed at max iteration — accepting as-is`,
+          );
         }
       }
     }
 
-    if (failedSections.length === 0) {
-      // All passed — move to scoring
+    if (retryingSections.length === 0) {
+      // All passed or max iterations — move to scoring
       await this.prisma.researchCase.update({
         where: { id: caseId },
         data: { status: 'scoring' },
@@ -280,7 +268,8 @@ export class ResearchService {
 
       await this.scorerQueue.add('score', { caseId });
     } else {
-      // Some sections need retry
+      // Some sections retrying
+      this.logger.log(`Retrying sections: ${retryingSections.join(', ')}`);
       await this.prisma.researchCase.update({
         where: { id: caseId },
         data: { status: 'research_in_progress' },
