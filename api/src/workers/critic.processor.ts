@@ -83,17 +83,33 @@ export class CriticProcessor extends WorkerHost {
         );
         if (!section) continue;
 
-        await this.prisma.criticReview.create({
-          data: {
+        const verdict = section.iteration >= 3 && review.verdict === 'fail'
+          ? 'pass_with_warning'
+          : review.verdict ?? 'pass';
+
+        await this.prisma.criticReview.upsert({
+          where: {
+            caseId_sectionType_iteration: {
+              caseId,
+              sectionType: review.section_type,
+              iteration: section.iteration,
+            },
+          },
+          update: {
+            evidenceQuality: review.evidence_quality ?? 3,
+            logicQuality: review.logic_quality ?? 3,
+            completeness: review.completeness ?? 3,
+            verdict,
+            feedback: review.feedback ?? null,
+          },
+          create: {
             caseId,
             sectionType: review.section_type,
             iteration: section.iteration,
             evidenceQuality: review.evidence_quality ?? 3,
             logicQuality: review.logic_quality ?? 3,
             completeness: review.completeness ?? 3,
-            verdict: section.iteration >= 3 && review.verdict === 'fail'
-              ? 'pass_with_warning'
-              : review.verdict ?? 'pass',
+            verdict,
             feedback: review.feedback ?? null,
           },
         });
