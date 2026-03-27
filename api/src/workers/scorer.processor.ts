@@ -106,8 +106,17 @@ export class ScorerProcessor extends WorkerHost {
       const recommendation =
         totalScore >= 4.0 ? 'go' : totalScore >= 3.0 ? 'hold' : 'reject';
 
-      await this.prisma.scoringResult.create({
-        data: {
+      await this.prisma.scoringResult.upsert({
+        where: { caseId },
+        update: {
+          scores,
+          totalScore: Math.round(totalScore * 100) / 100,
+          recommendation,
+          reasoning: llmResult.content.reasoning || '',
+          weakSections: llmResult.content.weak_sections || [],
+          strongSections: llmResult.content.strong_sections || [],
+        },
+        create: {
           caseId,
           scores,
           totalScore: Math.round(totalScore * 100) / 100,
