@@ -230,6 +230,18 @@ export class ResearchService {
 
     if (!allSettled) return;
 
+    // Atomic status guard: only the first caller transitions to critic_review
+    // Prevents race condition when multiple sections complete simultaneously
+    const updated = await this.prisma.researchCase.updateMany({
+      where: { id: caseId, status: 'research_in_progress' },
+      data: { status: 'critic_review' },
+    });
+
+    if (updated.count === 0) {
+      this.logger.warn(`onSectionDone: case ${caseId} not in research_in_progress, skipping`);
+      return;
+    }
+
     const completedSections = sections.filter(
       (s) => s.status === 'completed',
     );
@@ -241,14 +253,8 @@ export class ResearchService {
       );
     }
 
-    // Always proceed — even partial results are valuable
     const researchCase = await this.prisma.researchCase.findUnique({
       where: { id: caseId },
-    });
-
-    await this.prisma.researchCase.update({
-      where: { id: caseId },
-      data: { status: 'critic_review' },
     });
 
     await this.criticQueue.add('critic-review', {
@@ -260,6 +266,16 @@ export class ResearchService {
 
   // Called by Pipeline Manager when critic finishes
   async onCriticDone(caseId: string) {
+    // Atomic status guard: only proceed if case is in critic_review
+    const guardCheck = await this.prisma.researchCase.findUnique({
+      where: { id: caseId },
+    });
+
+    if (guardCheck?.status !== 'critic_review') {
+      this.logger.warn(`onCriticDone: case ${caseId} status=${guardCheck?.status}, expected critic_review — skipping`);
+      return;
+    }
+
     const reviews = await this.prisma.criticReview.findMany({
       where: { caseId },
       orderBy: { iteration: 'desc' },
@@ -274,9 +290,7 @@ export class ResearchService {
     }
 
     const retryingSections: string[] = [];
-    const researchCase = await this.prisma.researchCase.findUnique({
-      where: { id: caseId },
-    });
+    const researchCase = guardCheck;
 
     for (const [sectionType, review] of latestReviews) {
       if (review.verdict === 'fail') {
@@ -314,20 +328,29 @@ export class ResearchService {
     }
 
     if (retryingSections.length === 0) {
-      // All passed or max iterations — move to scoring
-      await this.prisma.researchCase.update({
-        where: { id: caseId },
+      // All passed or max iterations — move to scoring (atomic guard)
+      const scoringUpdate = await this.prisma.researchCase.updateMany({
+        where: { id: caseId, status: 'critic_review' },
         data: { status: 'scoring' },
       });
 
+      if (scoringUpdate.count === 0) {
+        this.logger.warn(`onCriticDone: case ${caseId} raced past critic_review, skipping scorer`);
+        return;
+      }
+
       await this.scorerQueue.add('score', { caseId, generation: researchCase?.generation ?? 1 });
     } else {
-      // Some sections retrying
+      // Some sections retrying — atomic guard back to research_in_progress
       this.logger.log(`Retrying sections: ${retryingSections.join(', ')}`);
-      await this.prisma.researchCase.update({
-        where: { id: caseId },
+      const retryUpdate = await this.prisma.researchCase.updateMany({
+        where: { id: caseId, status: 'critic_review' },
         data: { status: 'research_in_progress' },
       });
+
+      if (retryUpdate.count === 0) {
+        this.logger.warn(`onCriticDone: case ${caseId} raced during retry transition`);
+      }
     }
   }
 
@@ -491,10 +514,16 @@ export class ResearchService {
 
   // Called when scorer finishes
   async onScoringDone(caseId: string) {
-    await this.prisma.researchCase.update({
-      where: { id: caseId },
+    // Atomic status guard: only set report_ready if still in scoring
+    const updated = await this.prisma.researchCase.updateMany({
+      where: { id: caseId, status: 'scoring' },
       data: { status: 'report_ready' },
     });
+
+    if (updated.count === 0) {
+      this.logger.warn(`onScoringDone: case ${caseId} not in scoring, skipping notification`);
+      return;
+    }
 
     const researchCase = await this.prisma.researchCase.findUnique({
       where: { id: caseId },
