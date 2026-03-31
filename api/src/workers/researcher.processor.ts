@@ -84,7 +84,7 @@ export class ResearcherProcessor extends WorkerHost {
         feedback,
       );
 
-      const researcherModel = process.env.RESEARCHER_MODEL || process.env.LLM_MODEL || 'claude-haiku-4-5-20251001';
+      const researcherModel = process.env.RESEARCHER_MODEL || process.env.LLM_MODEL || 'openai/gpt-4.1-mini';
       const llmResult = await this.llm.complete(systemPrompt, userPrompt, {
         tools: true,
         maxLoops: 8,

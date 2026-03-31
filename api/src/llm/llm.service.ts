@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import Anthropic from '@anthropic-ai/sdk';
+import OpenAI from 'openai';
 import { SearchService, SearchResult } from '../search/search.service';
 
 export interface LlmResponse {
@@ -9,38 +9,46 @@ export interface LlmResponse {
   searchCalls: number;
 }
 
-const WEB_SEARCH_TOOL: Anthropic.Tool = {
-  name: 'web_search',
-  description:
-    'Search the web for current information. Use this to find real data about markets, companies, products, trends, and news.',
-  input_schema: {
-    type: 'object' as const,
-    properties: {
-      query: {
-        type: 'string',
-        description: 'Search query — be specific, include company/product names',
+const WEB_SEARCH_TOOL: OpenAI.ChatCompletionTool = {
+  type: 'function',
+  function: {
+    name: 'web_search',
+    description:
+      'Search the web for current information. Use this to find real data about markets, companies, products, trends, and news.',
+    parameters: {
+      type: 'object',
+      properties: {
+        query: {
+          type: 'string',
+          description: 'Search query — be specific, include company/product names',
+        },
+        max_results: {
+          type: 'number',
+          description: 'Number of results (default 5, max 10)',
+        },
       },
-      max_results: {
-        type: 'number',
-        description: 'Number of results (default 5, max 10)',
-      },
+      required: ['query'],
     },
-    required: ['query'],
   },
 };
 
 @Injectable()
 export class LlmService {
   private readonly logger = new Logger(LlmService.name);
-  private client: Anthropic;
+  private client: OpenAI;
   private model: string;
 
   constructor(private searchService: SearchService) {
-    this.client = new Anthropic({
-      apiKey: process.env.ANT_API_KEY || 'dummy',
-      timeout: 120_000, // 2 min per API call
+    this.client = new OpenAI({
+      apiKey: process.env.OPENROUTER_API_KEY || 'dummy',
+      baseURL: 'https://openrouter.ai/api/v1',
+      timeout: 120_000,
+      defaultHeaders: {
+        'HTTP-Referer': 'https://army-of-agents.vercel.app',
+        'X-Title': 'Army of Agents',
+      },
     });
-    this.model = process.env.LLM_MODEL || 'claude-sonnet-4-6';
+    this.model = process.env.LLM_MODEL || 'openai/gpt-4.1-mini';
   }
 
   /**
@@ -55,34 +63,36 @@ export class LlmService {
     const useTools = options?.tools ?? false;
     const maxLoops = options?.maxLoops ?? 5;
     const activeModel = options?.model || this.model;
-    const tools = useTools ? [WEB_SEARCH_TOOL] : [];
+    const tools = useTools ? [WEB_SEARCH_TOOL] : undefined;
 
     let totalTokensIn = 0;
     let totalTokensOut = 0;
     let searchCalls = 0;
 
-    const messages: Anthropic.MessageParam[] = [
+    const messages: OpenAI.ChatCompletionMessageParam[] = [
+      { role: 'system', content: systemPrompt },
       { role: 'user', content: userPrompt },
     ];
 
     for (let loop = 0; loop < maxLoops; loop++) {
       this.logger.log(`LLM call #${loop + 1} (model=${activeModel})`);
 
-      const response = await this.client.messages.create({
+      const response = await this.client.chat.completions.create({
         model: activeModel,
         max_tokens: 4096,
-        system: systemPrompt,
         messages,
-        tools: tools.length > 0 ? tools : undefined,
+        tools,
       });
 
-      totalTokensIn += response.usage.input_tokens;
-      totalTokensOut += response.usage.output_tokens;
+      const choice = response.choices[0];
+      const usage = response.usage;
 
-      // If model stops without tool use — extract JSON from response
-      if (response.stop_reason === 'end_turn' || response.stop_reason !== 'tool_use') {
-        const textBlock = response.content.find((b) => b.type === 'text');
-        const raw = textBlock?.type === 'text' ? textBlock.text : '{}';
+      totalTokensIn += usage?.prompt_tokens ?? 0;
+      totalTokensOut += usage?.completion_tokens ?? 0;
+
+      // If model finishes without tool calls — extract JSON from response
+      if (choice.finish_reason !== 'tool_calls') {
+        const raw = choice.message?.content || '{}';
 
         return {
           content: this.parseJson(raw),
@@ -92,16 +102,17 @@ export class LlmService {
         };
       }
 
-      // Handle tool_use — execute search, feed results back
-      const toolBlocks = response.content.filter((b) => b.type === 'tool_use');
-      const toolResults: Anthropic.ToolResultBlockParam[] = [];
+      // Handle tool calls — execute search, feed results back
+      const toolCalls = choice.message?.tool_calls || [];
 
-      for (const block of toolBlocks) {
-        if (block.type !== 'tool_use') continue;
+      // Add assistant message with tool calls to history
+      messages.push(choice.message);
 
-        if (block.name === 'web_search') {
+      for (const toolCall of toolCalls) {
+        if (toolCall.type !== 'function') continue;
+        if (toolCall.function.name === 'web_search') {
           searchCalls++;
-          const input = block.input as { query: string; max_results?: number };
+          const input = JSON.parse(toolCall.function.arguments);
           this.logger.log(`Tool call: web_search("${input.query}")`);
 
           const results = await this.searchService.search(
@@ -109,17 +120,20 @@ export class LlmService {
             input.max_results || 5,
           );
 
-          toolResults.push({
-            type: 'tool_result',
-            tool_use_id: block.id,
+          messages.push({
+            role: 'tool',
+            tool_call_id: toolCall.id,
             content: this.formatSearchResults(results),
+          });
+        } else {
+          // Unknown tool — return empty result
+          messages.push({
+            role: 'tool',
+            tool_call_id: toolCall.id,
+            content: 'Unknown tool',
           });
         }
       }
-
-      // Append assistant response + tool results for next loop
-      messages.push({ role: 'assistant', content: response.content });
-      messages.push({ role: 'user', content: toolResults });
     }
 
     // Max loops reached — return last attempt

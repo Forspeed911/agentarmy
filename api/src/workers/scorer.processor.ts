@@ -94,7 +94,7 @@ export class ScorerProcessor extends WorkerHost {
         })),
       );
 
-      const scorerModel = process.env.SCORER_MODEL || process.env.LLM_MODEL || 'claude-haiku-4-5-20251001';
+      const scorerModel = process.env.SCORER_MODEL || process.env.LLM_MODEL || 'openai/gpt-4.1-nano';
       const llmResult = await this.llm.completeSimple(systemPrompt, userPrompt, { model: scorerModel });
 
       const scores = llmResult.content.scores || {};

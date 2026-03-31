@@ -69,7 +69,7 @@ export class CriticProcessor extends WorkerHost {
         })),
       );
 
-      const criticModel = process.env.CRITIC_MODEL || process.env.LLM_MODEL || 'claude-haiku-4-5-20251001';
+      const criticModel = process.env.CRITIC_MODEL || process.env.LLM_MODEL || 'openai/gpt-4.1-nano';
       const llmResult = await this.llm.completeSimple(systemPrompt, userPrompt, { model: criticModel });
 
       // Parse reviews array
